@@ -32,7 +32,8 @@ export const processStream = (response, state) => {
     }
 
     if (item.mk_rec_type === "message") {
-      updateItem(item.message_id, item, messages);
+      const message_id = item.conversation_id + ',' + item.message_nr;
+      updateItem(message_id, item, messages);
     }
   });
 
