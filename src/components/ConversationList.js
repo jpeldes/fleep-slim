@@ -1,5 +1,4 @@
 import React from "react";
-import { syncConversations } from "../api";
 
 const styleConversation = isActive => {
   return {
@@ -36,29 +35,12 @@ class ConversationListItem extends React.PureComponent {
 }
 
 export default class ConversationList extends React.Component {
-  state = {
-    conversations: []
-  };
-
-  componentDidMount() {
-    syncConversations()
-      .then(conversations => {
-        this.setState({ conversations });
-      })
-      .finally(() => {
-        this.setState({ isLoading: false });
-      });
-  }
-
   render() {
     return (
-      <div
-          className="conv-list"
-          style={styleConvList}
-        >
+      <div className="conv-list" style={styleConvList}>
         <h2 style={{ textAlign: "center" }}>Fleep</h2>
         <div>
-          {this.state.conversations.map(conv => (
+          {this.props.conversations.map(conv => (
             <ConversationListItem
               key={conv.conversation_id}
               conversationId={conv.conversation_id}

@@ -1,5 +1,4 @@
 import { generateUUID, getEmailFromUrlParam } from "./utils.js";
-import { renderLogin } from "./index.js";
 
 const API_URL = ""; // TODO
 
@@ -45,27 +44,6 @@ export const login = (email, password) => {
   });
 };
 
-// Sync conversations.
-// Initial poll, with event_horizon: 0 ..
-// .. gives all basic records - teams, contacts, conversations
-export const syncConversations = () => {
-  return apiPost("/api/account/poll", { wait: false, event_horizon: 0 })
-    .then(response => {
-      MY_CONTACT = response.stream.find(
-        item =>
-          item.mk_rec_type === "contact" &&
-          item.hasOwnProperty("activated_time")
-      );
-
-      return response.stream.filter(item => item.mk_rec_type === "conv");
-    })
-    .catch(error => {
-      if (error.error_id.toLowerCase() === "unauthorized") {
-        renderLogin();
-      }
-    });
-};
-
 // Sync conversation messages and contacts ..
 // .. every time a conversation is opened
 export const syncConversationMessages = conversationId => {
@@ -79,26 +57,6 @@ export const syncConversationMessages = conversationId => {
 
   return apiPost("/api/event/store/", {
     stream: [event]
-  }).then(response => {
-    // Filter contact records from stream
-    let contacts = response.stream.filter(
-      item => item.mk_rec_type === "contact"
-    );
-    if (MY_CONTACT) {
-      // Hack to get my own contact in here, as its not within the sync apicall
-      contacts = [MY_CONTACT, ...contacts];
-    }
-
-    // Filter message records from stream
-    let messages = response.stream.filter(
-      item =>
-        item.mk_rec_type === "message" && // Find only message records
-        item.mk_message_state !== "urn:fleep:message:mk_message_state:system" // Ignore system messages
-    );
-    // Sort messages by inbox_nr
-    messages = messages.sort((a, b) => (a.inbox_nr < b.inbox_nr ? 1 : -1));
-
-    return Promise.resolve({ messages, contacts });
   });
 };
 
@@ -115,16 +73,21 @@ export const sendMessage = (conversation_id, message) => {
 
   return apiPost("/api/event/store/", {
     stream: [event]
-  }).then(response => {
-    const request = response.requests[0];
-    if (request && request.status_code === 200) {
-      const newMessageNr = request.identifier.message_nr;
-      const newMessage = response.stream.find(
-        record =>
-          record.mk_rec_type === "message" && record.message_nr === newMessageNr
-      );
-      return Promise.resolve(newMessage);
-    }
-    return Promise.reject(response);
   });
+};
+
+let LAST_EVENT_HORIZON = 0;
+export const longPoll = event_horizon => {
+  if (!event_horizon) {
+    event_horizon = LAST_EVENT_HORIZON;
+  }
+
+  return apiPost("/api/account/poll", { wait: true, event_horizon }).then(
+    response => {
+      // Middleware to store event_horizon
+      LAST_EVENT_HORIZON = response.event_horizon;
+
+      return Promise.resolve(response);
+    }
+  );
 };

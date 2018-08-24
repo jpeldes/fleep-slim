@@ -1,5 +1,4 @@
 import React from "react";
-import { syncConversationMessages, sendMessage } from "../api";
 
 const styleConvView = {
   overflow: "auto",
@@ -7,7 +6,13 @@ const styleConvView = {
   flexDirection: "column-reverse",
   flex: 3
 };
-const styleMessage = { borderBottom: "1px solid #ccc", padding: "0 12px" };
+const styleMessage = {
+  borderBottom: "1px solid #ccc",
+  padding: "0 12px",
+  margin: "8px 12px",
+  border: "2px solid #eee",
+  borderRadius: "8px"
+};
 const styleAuthor = {
   fontWeight: "600",
   marginTop: "12px",
@@ -17,7 +22,8 @@ const styleMessageList = {
   maxHeight: "calc(100% - 77px)",
   overflow: "auto",
   display: "flex",
-  flexDirection: "column-reverse"
+  flexDirection: "column-reverse",
+  flex: "1"
 };
 const styleTextarea = {
   maxHeight: "77px",
@@ -25,7 +31,17 @@ const styleTextarea = {
   fontSize: "1em",
   lineHeight: "1em",
   padding: ".5em",
-  height: "77px"
+  height: "77px",
+  margin: "12px",
+  border: "2px solid #eee",
+  borderRadius: "8px",
+  outline: 0
+};
+const styleLoading = {
+  display: "flex",
+  flex: "1",
+  justifyContent: "center",
+  alignItems: "center"
 };
 const styleTimestamp = { color: "#777", paddingLeft: "8px", fontSize: "14px" };
 
@@ -50,6 +66,7 @@ export default class Conversation extends React.Component {
   state = {
     textareaContent: "",
     isSyncing: false,
+    isSending: false,
     messages: [],
     contacts: []
   };
@@ -69,29 +86,53 @@ export default class Conversation extends React.Component {
     }
   }
 
+  // Helpers
+
+  getAuthorName(authorId) {
+    const contact = this.props.contacts[authorId];
+    return contact ? contact.display_name || contact.email : authorId;
+  }
+
+  getMessageTime(posted_time) {
+    const posted = new Date(posted_time * 1000);
+    const today = new Date();
+
+    const todayDate = today.toLocaleDateString();
+    const postedTime = posted.toLocaleTimeString();
+    const postedDate = posted.toLocaleDateString();
+
+    if (postedDate === todayDate) {
+      return `${postedTime}`;
+    }
+    return `${postedTime}, ${postedDate}`;
+  }
+
+  // API calls
+
   doSync = () => {
     this.setState({ isSyncing: true });
 
-    return syncConversationMessages(this.props.activeConversationId)
-      .then(({ messages, contacts }) => {
-        this.setState({ messages, contacts });
-      })
+    return this.props
+      .syncConversationMessages(this.props.activeConversationId)
       .finally(() => {
         this.setState({ isSyncing: false });
       });
   };
 
   doSend = message => {
-    return sendMessage(this.props.activeConversationId, message).then(
-      newMessageRecord => {
-        // Add the new message to top
-        this.setState({
-          messages: [newMessageRecord, ...this.state.messages],
-          textareaContent: ""
-        });
-      }
-    );
+    if (this.state.isSending) {
+      return;
+    }
+
+    this.setState({ isSending: true });
+
+    return this.props
+      .sendMessage(this.props.activeConversationId, message)
+      .then(() => this.setState({ textareaContent: "" }))
+      .finally(() => this.setState({ isSending: false }));
   };
+
+  // Event handlers
 
   onTextareaChange = event => {
     this.setState({ textareaContent: event.target.value });
@@ -111,37 +152,18 @@ export default class Conversation extends React.Component {
     }
   };
 
-  getAuthorName(authorId) {
-    const contact = this.state.contacts.find(
-      contact => contact.account_id === authorId
-    );
-    return contact ? contact.display_name || contact.email : authorId;
-  }
-
-  getMessageTime(posted_time) {
-    const posted = new Date(posted_time * 1000);
-    const today = new Date();
-
-    const todayDate = today.toLocaleDateString();
-    const postedTime = posted.toLocaleTimeString();
-    const postedDate = posted.toLocaleDateString();
-
-    if (postedDate === todayDate) {
-      return `${postedTime}`;
-    }
-    return `${postedTime}, ${postedDate}`;
-  }
+  // Rendering
 
   renderMessages = () => {
     if (this.state.isSyncing) {
-      return "Syncing...";
+      return <div style={styleLoading}>Syncing...</div>;
     }
 
-    if (!this.state.messages.length) {
-      return "No messages";
+    if (!this.props.messages.length) {
+      return <div style={styleLoading}>No messages</div>;
     }
 
-    return this.state.messages.map(message => {
+    return this.props.messages.map(message => {
       return (
         <MessageListItem
           key={"message-" + message.message_nr}
@@ -156,18 +178,24 @@ export default class Conversation extends React.Component {
 
   render() {
     if (!this.props.activeConversationId) {
-      return <div className="conv-view" style={styleConvView}></div>;
+      return <div className="conv-view" style={styleConvView} />;
     }
 
     return (
       <div className="conv-view" style={styleConvView}>
         <textarea
+          autoFocus={true}
           rows="2"
           maxLength="307200"
           value={this.state.textareaContent}
           onChange={this.onTextareaChange}
           onKeyDown={this.onTextareaKey}
-          placeholder="Type your message"
+          placeholder={
+            this.props.isTextareaDisabled
+              ? "You are not a member of this conversation"
+              : "Type your message"
+          }
+          disabled={this.props.isTextareaDisabled}
           style={styleTextarea}
         />
         <div className="message-list" style={styleMessageList}>
