@@ -61,6 +61,7 @@ export default class App extends React.Component {
 
     return longPoll()
       .then(this.processPoll)
+      .then(this.startPoll)
       .catch(this.catchPoll);
   };
 
@@ -68,8 +69,6 @@ export default class App extends React.Component {
     let newState = processStream(response, this.state);
 
     this.setState(newState);
-
-    this.startPoll();
   };
 
   catchPoll = error => {
